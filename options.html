@@ -1,0 +1,90 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Netflix Scene Filter - Settings</title>
+<style>
+  body{margin:0;background:#16161a;color:#eee;font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:820px;margin:0 auto;padding:20px;display:flex;flex-direction:column;gap:20px}
+  h1{font-size:20px;margin:0} h2{font-size:15px;margin:0 0 8px}
+  section{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:14px}
+  table{border-collapse:collapse;width:100%} td,th{padding:4px 6px;text-align:left;vertical-align:middle}
+  th{font-weight:500;opacity:.65;font-size:12px}
+  input[type=text],input[type=number],select,textarea{background:#0e0e11;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:5px 7px;color:#eee;font:inherit}
+  textarea{width:100%;box-sizing:border-box;min-height:150px}
+  input[type=color]{width:34px;height:24px;border:0;background:none;padding:0}
+  button{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:#eee;border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit}
+  button:hover{background:rgba(255,255,255,.2)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+  .muted{opacity:.7;font-size:12px}
+  .hk{width:170px;cursor:pointer}
+  .sw{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 12px;font-size:18px;font-weight:600;width:100%;text-align:left}
+  .sw.small{min-height:40px;font-size:15px}
+  .trk{width:56px;height:30px;border-radius:15px;background:#8f2f2f;position:relative;flex:none;transition:background .15s}
+  .trk::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s}
+  .sw.on .trk{background:#1f8f4e}.sw.on .trk::after{left:29px}
+  .presets{display:flex;gap:8px;margin-top:10px}.presets button{flex:1;min-height:44px;font-weight:600;font-size:15px}
+  .presets button.cur{background:#2a5fb0;border-color:#6aa0ff}
+  .divider{display:flex;align-items:center;gap:12px;opacity:.8;font-weight:600;margin-top:6px}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.25)}
+  label.chk{display:flex;align-items:center;gap:8px;margin-top:10px}
+</style></head>
+<body><div class="wrap">
+  <h1>Netflix Scene Filter - Settings</h1>
+
+  <!-- ================= SIMPLE ================= -->
+  <section>
+    <h2>Quick setup</h2>
+    <button id="filtering" class="sw" title="Turn all filtering on or off"><span class="trk"></span><span id="filteringTxt"></span></button>
+    <div class="presets" id="presets"></div>
+    <div class="muted" id="presetDesc" style="margin-top:8px"></div>
+    <button id="wordFilter" class="sw small" style="margin-top:12px" title="Mutes bad words by reading Netflix subtitles. Turn subtitles on in Netflix for this to work."><span class="trk"></span><span id="wordFilterTxt"></span></button>
+    <div class="muted" style="margin-top:4px">The word filter needs Netflix subtitles to be switched on (any language).</div>
+    <label class="chk" title="Show the marking bar at the bottom of the Netflix video"><input type="checkbox" id="toolbarVisible"> Show the marking bar on Netflix videos</label>
+  </section>
+
+  <div class="divider">Advanced</div>
+
+  <!-- ================= ADVANCED ================= -->
+  <section>
+    <h2>What to filter</h2>
+    <table><thead><tr><th>Color</th><th>Name (you can change it)</th><th>What happens</th><th>Filter it</th><th></th></tr></thead>
+    <tbody id="cats"></tbody></table>
+    <div class="row"><button id="addCat" title="Make your own kind of scene">Add a kind of scene</button><button id="resetCats" title="Go back to the original list">Reset to the original list</button></div>
+    <div class="muted" style="margin-top:6px">Mute sound = the volume goes off. Hide picture = the screen goes black. Skip ahead = jumps past the scene. Don't filter = ignored. Each saved scene can use its own choice in "My scenes".</div>
+  </section>
+
+  <section>
+    <h2>Automatic word filter</h2>
+    <div class="muted">One word or phrase per line. Capitals don't matter, whole words only. Use * as a wildcard, for example <b>damn*</b> also catches "damned".</div>
+    <textarea id="words" style="margin-top:8px" title="Words that should be muted when they appear in the subtitles"></textarea>
+    <div class="row">
+      <label title="Extra seconds saved before the word when you use 'Save as scene'">Lead time (milliseconds) <input type="number" id="leadMs" min="0" max="3000" step="50" style="width:90px"></label>
+      <label title="How long to keep the sound off after the subtitle disappears (at least 800)">Keep muted after the line ends (milliseconds) <input type="number" id="holdMs" min="800" max="10000" step="100" style="width:100px"></label>
+    </div>
+    <div class="row"><button id="resetWords" title="Go back to the short built-in list">Reset the word list</button></div>
+  </section>
+
+  <section>
+    <h2>Keyboard shortcuts (optional)</h2>
+    <table><tbody id="hotkeys"></tbody></table>
+    <div class="muted">Click a box and press the new keys (include Alt, Ctrl or Shift so they don't clash with Netflix).</div>
+    <div class="row"><button id="resetHk" title="Go back to the original shortcuts">Reset shortcuts</button></div>
+  </section>
+
+  <section>
+    <h2>Text on hidden scenes</h2>
+    <input type="text" id="blankText" style="width:260px" title="What the black screen says while a scene is hidden">
+  </section>
+
+  <section>
+    <h2>All my shows</h2>
+    <div id="libInfo" class="muted"></div>
+    <table><tbody id="lib"></tbody></table>
+    <div class="row">
+      <button id="exportAll" title="Save the scenes for all your shows to a file you can share">Save my list to a file</button>
+      <button id="import" title="Add scenes from a file someone shared with you">Load a list from a file</button>
+    </div>
+    <div id="msg" class="muted" style="margin-top:6px"></div>
+  </section>
+</div>
+<script src="shared.js"></script>
+<script src="options.js"></script>
+</body></html>

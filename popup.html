@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Netflix Scene Filter</title>
+<style>
+  body{margin:0;width:340px;background:#16161a;color:#eee;font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{padding:14px;display:flex;flex-direction:column;gap:12px}
+  h1{font-size:16px;margin:0}
+  .muted{opacity:.7;font-size:12px}
+  button{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:#eee;border-radius:8px;padding:5px 10px;cursor:pointer;font:inherit}
+  button:hover{background:rgba(255,255,255,.2)}
+  button.link{background:none;border:0;padding:0;color:#7db7ff;text-decoration:underline;font-size:13px}
+  button.sm{padding:1px 7px;font-size:12px}
+  .sw{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:0 10px;font-size:17px;font-weight:600;text-align:left}
+  .sw.small{min-height:36px;font-size:14px}
+  .trk{width:54px;height:30px;border-radius:15px;background:#8f2f2f;position:relative;flex:none;transition:background .15s}
+  .trk::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s}
+  .sw.on .trk{background:#1f8f4e}.sw.on .trk::after{left:27px}
+  .sw.small .trk{width:44px;height:24px;border-radius:12px}.sw.small .trk::after{width:18px;height:18px}
+  .sw.small.on .trk::after{left:23px}
+  .presets{display:flex;gap:6px}.presets button{flex:1;min-height:40px;font-weight:600}
+  .presets button.cur{background:#2a5fb0;border-color:#6aa0ff}
+  .links{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .crow{display:flex;align-items:center;gap:6px;padding:2px 0}.crow .n{flex:1}
+  .dot{width:11px;height:11px;border-radius:50%;display:inline-block}
+  select{background:#0e0e11;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:3px;color:#eee;font:inherit;font-size:12px}
+  .adv{display:none;flex-direction:column;gap:10px;border-top:1px solid rgba(255,255,255,.12);padding-top:10px}
+  .adv.show{display:flex}
+  .h4{font-weight:600}
+  .scene{display:flex;align-items:center;gap:6px;font-size:12px}.scene .t{flex:1}
+  .row{display:flex;gap:6px;flex-wrap:wrap}
+  #msg{min-height:16px}
+</style></head>
+<body><div class="wrap">
+  <h1>Netflix Scene Filter</h1>
+  <div id="status" class="muted">Checking...</div>
+
+  <button id="filtering" class="sw" title="Turn all filtering on or off"><span class="trk"></span><span id="filteringTxt">Filter</span></button>
+
+  <div>
+    <div class="presets" id="presets"></div>
+    <div class="muted" id="presetDesc" style="margin-top:6px"></div>
+  </div>
+
+  <div class="links">
+    <button class="link" id="showTools" title="Show the marking bar on the Netflix video">Show marking tools</button>
+    <button class="link" id="advToggle" title="Show every option">Advanced ▾</button>
+  </div>
+
+  <div class="adv" id="adv">
+    <button id="wordFilter" class="sw small" title="Mutes bad words by reading Netflix subtitles. Turn subtitles on in Netflix for this to work."><span class="trk"></span><span id="wordFilterTxt"></span></button>
+    <div class="h4">What to filter</div>
+    <div id="cats"></div>
+    <div class="h4">Scenes in this show</div>
+    <div id="scenes" class="muted">Open a Netflix show to see its scenes.</div>
+    <div class="row">
+      <button id="panel" title="Open the full list of scenes on the Netflix page">My scenes</button>
+      <button id="export" title="Save the scenes for all your shows to a file you can share">Save my list to a file</button>
+      <button id="import" title="Add scenes from a file someone shared with you">Load a list from a file</button>
+    </div>
+    <button class="link" id="opts" title="Word list, scene names, keyboard shortcuts and more">All settings</button>
+  </div>
+  <div id="msg" class="muted"></div>
+</div>
+<script src="shared.js"></script>
+<script src="popup.js"></script>
+</body></html>

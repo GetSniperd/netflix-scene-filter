@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Netflix Scene Filter",
+  "version": "0.2.0",
+  "description": "Timestamp and categorize scenes in Netflix episodes, then automatically mute, blank or skip them during playback.",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.netflix.com/*"],
+      "js": ["page-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.netflix.com/*"],
+      "js": ["shared.js", "content.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    }
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_title": "Netflix Scene Filter",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}
