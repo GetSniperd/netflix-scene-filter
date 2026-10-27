@@ -21,6 +21,7 @@ var NSF = (function () {
 
   var DEFAULT_SETTINGS = {
     filteringEnabled: true,
+    autoSave: true,
     blankText: 'Filtered scene',
     hotkeys: {
       markStart: 'Alt+[',
@@ -63,6 +64,8 @@ var NSF = (function () {
 
   var ACTIONS = ['mute', 'blank', 'skip', 'off'];
   var FORMAT = 'netflix-scene-filter';
+  var SHOW_FORMAT = 'netflix-scene-filter/1';
+  var FOLDER = 'Netflix Scene Filter';
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -86,6 +89,7 @@ var NSF = (function () {
     var out = clone(DEFAULT_SETTINGS);
     if (s && typeof s === 'object') {
       if (typeof s.filteringEnabled === 'boolean') out.filteringEnabled = s.filteringEnabled;
+      if (typeof s.autoSave === 'boolean') out.autoSave = s.autoSave;
       if (typeof s.blankText === 'string') out.blankText = s.blankText;
       if (s.hotkeys && typeof s.hotkeys === 'object') {
         Object.keys(out.hotkeys).forEach(function (k) {
@@ -286,6 +290,8 @@ var NSF = (function () {
       var id = String(ep.videoId || keyHint || '');
       if (!id) return;
       lib[id] = { videoId: id, title: typeof ep.title === 'string' ? ep.title : '', segments: ep.segments };
+      if (typeof ep.showTitle === 'string' && ep.showTitle.trim()) lib[id].showTitle = ep.showTitle.trim();
+      if (typeof ep.episodeLabel === 'string' && ep.episodeLabel.trim()) lib[id].episodeLabel = ep.episodeLabel.trim();
     }
     if (!obj || typeof obj !== 'object') return { library: lib, categories: cats };
     if (Array.isArray(obj.categories)) cats = obj.categories;
@@ -294,6 +300,13 @@ var NSF = (function () {
       else Object.keys(obj.library).forEach(function (k) { addEp(obj.library[k], k); });
     } else if (Array.isArray(obj.episodes)) {
       obj.episodes.forEach(function (e) { addEp(e); });
+    } else if (obj.episodes && typeof obj.episodes === 'object') {
+      // Show file: { format: "netflix-scene-filter/1", show, episodes: { videoId: { episodeLabel, segments } } }
+      Object.keys(obj.episodes).forEach(function (k) {
+        var e = obj.episodes[k];
+        if (!e || typeof e !== 'object') return;
+        addEp({ videoId: k, segments: e.segments, episodeLabel: e.episodeLabel, showTitle: obj.show }, k);
+      });
     } else if (Array.isArray(obj.segments)) {
       addEp(obj);
     } else {
@@ -304,12 +317,16 @@ var NSF = (function () {
 
   /** Merge incoming episodes into lib (mutates). Dedupes by overlap + category. */
   function mergeLibrary(lib, incoming) {
-    var stats = { episodes: 0, added: 0, skipped: 0 };
+    var stats = { episodes: 0, added: 0, skipped: 0, shows: [] };
     Object.keys(incoming).forEach(function (id) {
       var src = incoming[id];
       var ep = lib[id];
       if (!ep || !Array.isArray(ep.segments)) ep = lib[id] = { videoId: id, title: src.title || '', segments: [], updatedAt: 0 };
       if (!ep.title && src.title) ep.title = src.title;
+      if (!ep.showTitle && src.showTitle) ep.showTitle = src.showTitle;
+      if (!ep.episodeLabel && src.episodeLabel) ep.episodeLabel = src.episodeLabel;
+      var sn = showNameOf(ep, id);
+      if (stats.shows.indexOf(sn) < 0) stats.shows.push(sn);
       var taken = {};
       ep.segments.forEach(function (s) { taken[s.id] = true; });
       var addedHere = 0;
@@ -360,6 +377,63 @@ var NSF = (function () {
     return { format: FORMAT, version: 1, exportedAt: new Date().toISOString(), categories: categories, library: lib };
   }
 
+
+  // ---------- shows (a "show" groups the episodes that share a showTitle) ----------
+  function showNameOf(ep, id) {
+    var t = ep && typeof ep.showTitle === 'string' ? ep.showTitle.trim() : '';
+    return t || ('Show ' + (id || (ep && ep.videoId) || ''));
+  }
+  /** { showName: [videoId, ...] } */
+  function groupByShow(library) {
+    var g = {};
+    Object.keys(library || {}).forEach(function (id) {
+      var n = showNameOf(library[id], id);
+      (g[n] = g[n] || []).push(id);
+    });
+    return g;
+  }
+  /** Safe Windows file name (without extension). */
+  function safeFileName(name) {
+    var s = String(name || '').replace(/[<>:"\/\\|?*\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').replace(/[. ]+$/, '').replace(/^[. ]+/, '').trim();
+    if (/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(s)) s = s + '_';
+    if (s.length > 120) s = s.slice(0, 120).replace(/[. ]+$/, '');
+    return s || 'Untitled show';
+  }
+  /** The per-show file. */
+  function buildShowFile(library, categories, showName) {
+    var g = groupByShow(library);
+    var ids = g[showName] || [];
+    var episodes = {}, used = {};
+    ids.forEach(function (id) {
+      var ep = library[id];
+      var segs = Array.isArray(ep.segments) ? ep.segments : [];
+      segs.forEach(function (x) { if (x && x.category) used[x.category] = true; });
+      episodes[id] = { episodeLabel: ep.episodeLabel || '', segments: segs };
+    });
+    var out = { format: SHOW_FORMAT, show: showName, exportedAt: new Date().toISOString(), episodes: episodes };
+    var cats = (categories || []).filter(function (c) { return used[c.id]; });
+    if (cats.length) out.categories = cats;
+    return out;
+  }
+  /** Ask the background worker to write a show's file. Resolves {ok, file?, error?}; never rejects. */
+  function writeShowFile(showName, now) {
+    return new Promise(function (resolve) {
+      try {
+        chrome.runtime.sendMessage({ type: 'writeShowFile', show: showName, now: !!now }, function (r) {
+          void chrome.runtime.lastError;
+          resolve(r || { ok: false, error: 'No answer from the add-on.' });
+        });
+      } catch (e) { resolve({ ok: false, error: 'The add-on was reloaded. Reload this page.' }); }
+    });
+  }
+  /** Write the files for a list of show names (debounced unless now). */
+  function writeShows(names, now) {
+    return Promise.all((names || []).map(function (n) { return writeShowFile(n, now); }));
+  }
+  function writeAllShows(library) {
+    return writeShows(Object.keys(groupByShow(library)), true);
+  }
+
   function downloadJSON(filename, obj) {
     var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
@@ -371,6 +445,17 @@ var NSF = (function () {
     setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
   }
 
+  function readJSONFile(f) {
+    return new Promise(function (resolve, reject) {
+      var rd = new FileReader();
+      rd.onload = function () {
+        try { resolve(JSON.parse(String(rd.result))); } catch (e) { reject(new Error('That does not look like a scene list.')); }
+      };
+      rd.onerror = function () { reject(new Error('Could not read that file.')); };
+      rd.readAsText(f);
+    });
+  }
+
   function pickJSONFile() {
     return new Promise(function (resolve, reject) {
       var inp = document.createElement('input');
@@ -380,12 +465,7 @@ var NSF = (function () {
         var f = inp.files && inp.files[0];
         inp.remove();
         if (!f) return reject(new Error('No file chosen.'));
-        var rd = new FileReader();
-        rd.onload = function () {
-          try { resolve(JSON.parse(String(rd.result))); } catch (e) { reject(new Error('That does not look like a scene list.')); }
-        };
-        rd.onerror = function () { reject(new Error('Could not read that file.')); };
-        rd.readAsText(f);
+        readJSONFile(f).then(resolve, reject);
       });
       (document.body || document.documentElement).appendChild(inp);
       inp.click();
@@ -409,6 +489,8 @@ var NSF = (function () {
     uid: uid, fmtTime: fmtTime, slug: slug, comboFromEvent: comboFromEvent,
     normalizeSegment: normalizeSegment, parseImport: parseImport, mergeLibrary: mergeLibrary,
     importData: importData, buildExport: buildExport, downloadJSON: downloadJSON,
-    pickJSONFile: pickJSONFile, statsText: statsText
+    pickJSONFile: pickJSONFile, readJSONFile: readJSONFile, statsText: statsText,
+    SHOW_FORMAT: SHOW_FORMAT, FOLDER: FOLDER, showNameOf: showNameOf, groupByShow: groupByShow, safeFileName: safeFileName,
+    buildShowFile: buildShowFile, writeShowFile: writeShowFile, writeShows: writeShows, writeAllShows: writeAllShows
   };
 })();

@@ -1,4 +1,4 @@
-# Netflix Scene Filter (version 0.2.0)
+# Netflix Scene Filter (version 0.3.0)
 
 A browser add-on for Edge and Chrome that helps parents watch Netflix with their kids. You tell it where the parts you don't like are, and it will **mute the sound**, **hide the picture**, or **skip ahead** at those moments, every time that episode plays. It can also **mute bad words automatically** by reading the subtitles.
 
@@ -80,9 +80,22 @@ The add-on can listen for bad words by reading the subtitles Netflix draws on sc
 - It works together with saved scenes: the sound only comes back when neither one needs it off.
 - It is only as good as the subtitles. Words that the subtitles leave out or spell differently get through, and the sound is muted when the subtitle appears, which is usually (not always) at the start of the spoken line.
 
+## Where are my marks saved?
+
+Every time you add, change or delete a scene, the add-on also saves a small file for that show. You don't have to do anything.
+
+- The files go in your **Downloads** folder, inside a folder called **Netflix Scene Filter**. There is one file per show, named after the show, for example `Downloads\Netflix Scene Filter\Stranger Things.json`.
+- The first time it saves on a Netflix page you will see a message such as "Saved to Downloads\Netflix Scene Filter\Stranger Things.json". After that it saves quietly. Your browser may flash its download bubble each time.
+- The add-on keeps its own working copy too, and that is what does the filtering. The files are a backup you can see, copy and share. If you ever reinstall the add-on, load your files back in (see below).
+- If the show name Netflix gives is wrong or missing, open the "My scenes" window (Advanced) or Settings and type a better name. The file will be saved under the new name; the file with the old name stays in the folder and you can delete it yourself.
+- You can turn this off with **Auto-save files** in Settings. Then use **Save my list to a file** (it saves the current show right now) or **Save all shows** when you want files.
+
 ## Sharing your scenes
 
-Your scenes are saved for each episode on this computer. To share with another parent: Settings (gear) > **All my shows** > **Save my list to a file**, send them the file, and they use **Load a list from a file** (in Settings, the "My scenes" window, or the add-on icon's Advanced view). Loading never erases anything; it only adds scenes that aren't already there. Timing can differ slightly between countries or versions of an episode.
+1. Open `Downloads\Netflix Scene Filter` and send the other parent the file for that show (email, chat, a USB stick, anything).
+2. They open Settings (the gear on the bar, or "All settings" on the add-on icon) and either click **Load a list from a file** or simply **drag the file onto the Settings page**.
+
+Loading never erases anything; it only adds scenes that aren't already there. Files from older versions of this add-on still load. Timing can differ slightly between countries or versions of an episode.
 
 ## Keyboard shortcuts (optional)
 
@@ -108,4 +121,4 @@ You never need these, but they work and can be changed in Settings.
 
 ## For tinkerers
 
-Plain JavaScript, no build step. `manifest.json` (version 0.2.0), `background.js` (opens Settings), `page-bridge.js` (talks to Netflix's player), `shared.js` (defaults, storage, import/export), `content.js` (bar, panel, filter loop, word filter), `popup.*`, `options.*`. Scenes are stored per Netflix video id in `chrome.storage.local` as `{start, end, category, action?, note}` in seconds. Category internal ids (`language`, `fanservice`, `blood`, `death`, `scary`, `drugs`, `other`) are unchanged; each category now also has a `label` and `help`. Saved-list files use the format `netflix-scene-filter` version 1, and older files still load.
+Plain JavaScript, no build step. `manifest.json` (version 0.3.0), `background.js` (opens Settings), `page-bridge.js` (talks to Netflix's player), `shared.js` (defaults, storage, import/export), `content.js` (bar, panel, filter loop, word filter), `popup.*`, `options.*`. Scenes are stored per Netflix video id in `chrome.storage.local` as `{start, end, category, action?, note}` in seconds. Category internal ids (`language`, `fanservice`, `blood`, `death`, `scary`, `drugs`, `other`) are unchanged; each category now also has a `label` and `help`. Library entries also carry `showTitle` and `episodeLabel`. Show files are `{ "format": "netflix-scene-filter/1", "show": ..., "exportedAt": ..., "episodes": { "<videoId>": { "episodeLabel": ..., "segments": [...] } } }` (plus an optional `categories` list), written by the service worker with the `downloads` permission as a `data:` URL. Older per-episode and library files still load.

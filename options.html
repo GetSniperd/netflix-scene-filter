@@ -26,7 +26,8 @@
   .divider::before,.divider::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.25)}
   label.chk{display:flex;align-items:center;gap:8px;margin-top:10px}
 </style></head>
-<body><div class="wrap">
+<body><div id="dropHint" style="display:none;position:fixed;inset:0;z-index:9;background:rgba(20,40,80,.85);color:#fff;font-size:22px;align-items:center;justify-content:center;text-align:center;border:4px dashed #6aa0ff;box-sizing:border-box">Drop the .json file here to load it</div>
+<div class="wrap">
   <h1>Netflix Scene Filter - Settings</h1>
 
   <!-- ================= SIMPLE ================= -->
@@ -38,6 +39,22 @@
     <button id="wordFilter" class="sw small" style="margin-top:12px" title="Mutes bad words by reading Netflix subtitles. Turn subtitles on in Netflix for this to work."><span class="trk"></span><span id="wordFilterTxt"></span></button>
     <div class="muted" style="margin-top:4px">The word filter needs Netflix subtitles to be switched on (any language).</div>
     <label class="chk" title="Show the marking bar at the bottom of the Netflix video"><input type="checkbox" id="toolbarVisible"> Show the marking bar on Netflix videos</label>
+  </section>
+
+  <section>
+    <h2>Saved files</h2>
+    <button id="autoSave" class="sw small" title="Keep a plain file for each show up to date automatically"><span class="trk"></span><span id="autoSaveTxt">Auto-save files</span></button>
+    <div class="muted" style="margin-top:8px">Folder: <b>Downloads\Netflix Scene Filter</b> (one .json file per show, updated whenever you change your scenes).</div>
+    <div class="muted" style="margin-top:4px">Your browser may flash its download bubble each time a file is saved.</div>
+  </section>
+
+  <section id="shareSec">
+    <h2>Share</h2>
+    <div class="muted">To share a show, send the .json file for that show (look for its name in the folder above). To use someone else's, click <b>Load a list from a file</b> below, or drag their .json file onto this page. Loading never erases anything; it only adds scenes that aren't already there.</div>
+    <div class="row">
+      <button id="import2" title="Add scenes from a file someone shared with you">Load a list from a file</button>
+    </div>
+    <div id="msg2" class="muted" style="margin-top:6px"></div>
   </section>
 
   <div class="divider">Advanced</div>
@@ -79,7 +96,7 @@
     <div id="libInfo" class="muted"></div>
     <table><tbody id="lib"></tbody></table>
     <div class="row">
-      <button id="exportAll" title="Save the scenes for all your shows to a file you can share">Save my list to a file</button>
+      <button id="exportAll" title="Write one file per show to Downloads\Netflix Scene Filter">Save all shows</button>
       <button id="import" title="Add scenes from a file someone shared with you">Load a list from a file</button>
     </div>
     <div id="msg" class="muted" style="margin-top:6px"></div>

@@ -76,6 +76,7 @@
         ep.segments = ep.segments.filter(function (x) { return x.id !== g.id; });
         ep.updatedAt = Date.now();
         await NSF.setLibrary(data.library);
+        NSF.writeShowFile(NSF.showNameOf(ep, tabInfo.videoId), false);
         renderAdvanced(); status();
       });
       r.appendChild(t); r.appendChild(d); sc.appendChild(r);
@@ -136,14 +137,16 @@
     await queryTab({ type: 'nsf-togglePanel' });
     window.close();
   });
-  $('export').addEventListener('click', function () {
-    NSF.downloadJSON('scene-filter-all-my-shows.json', NSF.buildExport(data.library, data.categories));
-    msg('Saved ' + Object.keys(data.library).length + ' show(s) to a file.');
+  $('export').addEventListener('click', async function () {
+    var rs = await NSF.writeAllShows(data.library);
+    var bad = rs.filter(function (r) { return !r || !r.ok; }).length;
+    msg(bad ? 'Could not save ' + bad + ' file(s).' : 'Saved ' + rs.length + ' show file(s) to Downloads\\' + NSF.FOLDER + '.');
   });
   $('import').addEventListener('click', async function () {
     try {
       var s = await NSF.importData(await NSF.pickJSONFile());
       msg(NSF.statsText(s));
+      NSF.writeShows(s.shows, false);
       render(); status();
     } catch (e) { msg('Could not load that file: ' + (e && e.message || e)); }
   });

@@ -13,7 +13,7 @@
     return e;
   }
   function td(child) { var t = document.createElement('td'); if (child) t.appendChild(child); return t; }
-  function msg(t) { $('msg').textContent = t || ''; }
+  function msg(t) { $('msg').textContent = t || ''; $('msg2').textContent = t || ''; }
   function setSwitch(btn, on) {
     btn.classList.toggle('on', on);
     btn.setAttribute('role', 'switch');
@@ -40,6 +40,8 @@
     setSwitch($('wordFilter'), s.wordFilter.enabled);
     $('wordFilterTxt').textContent = 'Automatic word filter: ' + (s.wordFilter.enabled ? 'ON' : 'OFF');
     $('toolbarVisible').checked = s.toolbar.visible;
+    setSwitch($('autoSave'), s.autoSave);
+    $('autoSaveTxt').textContent = 'Auto-save files: ' + (s.autoSave ? 'ON' : 'OFF');
   }
 
   function renderCats() {
@@ -92,24 +94,38 @@
   }
 
   function renderLib() {
-    var ids = Object.keys(data.library);
-    $('libInfo').textContent = ids.length ? ids.length + ' show(s) with saved scenes.' : 'No scenes saved yet.';
+    var groups = NSF.groupByShow(data.library);
+    var names = Object.keys(groups);
+    $('libInfo').textContent = names.length ? names.length + ' show(s) with saved scenes.' : 'No scenes saved yet.';
     var tb = $('lib'); tb.textContent = '';
-    ids.forEach(function (id) {
-      var ep = data.library[id];
-      var n = ep && Array.isArray(ep.segments) ? ep.segments.length : 0;
-      var ex = el('button', { text: 'Save to a file', title: 'Save this show\'s scenes to a file you can share' });
-      ex.addEventListener('click', function () {
-        NSF.downloadJSON('scene-filter-' + id + '.json', NSF.buildExport(data.library, data.categories, [id]));
+    names.forEach(function (name) {
+      var ids = groups[name];
+      var n = 0;
+      ids.forEach(function (id) { var e = data.library[id]; n += e && Array.isArray(e.segments) ? e.segments.length : 0; });
+      var nameIn = el('input', { type: 'text', value: name, title: 'The show\'s name, also used for its file name. Change it if it is wrong.' });
+      nameIn.style.width = '100%';
+      nameIn.addEventListener('change', async function () {
+        var nn = nameIn.value.trim();
+        if (!nn || nn === name) { nameIn.value = name; return; }
+        ids.forEach(function (id) { if (data.library[id]) data.library[id].showTitle = nn; });
+        await NSF.setLibrary(data.library);
+        NSF.writeShowFile(nn, false);
+        renderLib();
+      });
+      var ex = el('button', { text: 'Save this show\'s file', title: 'Write this show\'s file to Downloads\\Netflix Scene Filter now' });
+      ex.addEventListener('click', async function () {
+        var r = await NSF.writeShowFile(name, true);
+        msg(r && r.ok ? 'Saved to Downloads\\' + NSF.FOLDER + '\\' + r.file : 'Could not save the file' + (r && r.error ? ' (' + r.error + ')' : '') + '.');
       });
       var del = el('button', { text: 'Delete', title: 'Delete all scenes for this show' });
       del.addEventListener('click', async function () {
-        if (!confirm('Delete all ' + n + ' scene(s) for "' + ((ep && ep.title) || id) + '"?')) return;
-        delete data.library[id]; await NSF.setLibrary(data.library); renderLib();
+        if (!confirm('Delete all ' + n + ' scene(s) for "' + name + '"? (A file already saved in Downloads is not deleted.)')) return;
+        ids.forEach(function (id) { delete data.library[id]; });
+        await NSF.setLibrary(data.library); renderLib();
       });
       var tr = document.createElement('tr');
-      tr.appendChild(td(el('span', { text: ((ep && ep.title) || 'Untitled') + '  (' + id + ')' })));
-      tr.appendChild(td(el('span', { class: 'muted', text: n + ' scene(s)' })));
+      tr.appendChild(td(nameIn));
+      tr.appendChild(td(el('span', { class: 'muted', text: ids.length + ' episode(s), ' + n + ' scene(s)' })));
       tr.appendChild(td(ex)); tr.appendChild(td(del));
       tb.appendChild(tr);
     });
@@ -127,6 +143,9 @@
   });
   $('wordFilter').addEventListener('click', function () {
     data.settings.wordFilter.enabled = !data.settings.wordFilter.enabled; saveSettings(); renderSimple();
+  });
+  $('autoSave').addEventListener('click', function () {
+    data.settings.autoSave = !data.settings.autoSave; saveSettings(); renderSimple();
   });
   $('toolbarVisible').addEventListener('change', function () {
     data.settings.toolbar.visible = $('toolbarVisible').checked; saveSettings();
@@ -167,14 +186,44 @@
   $('blankText').addEventListener('change', function () {
     data.settings.blankText = $('blankText').value; saveSettings();
   });
-  $('exportAll').addEventListener('click', function () {
-    NSF.downloadJSON('scene-filter-all-my-shows.json', NSF.buildExport(data.library, data.categories));
+  $('exportAll').addEventListener('click', async function () {
+    var rs = await NSF.writeAllShows(data.library);
+    var bad = rs.filter(function (r) { return !r || !r.ok; }).length;
+    msg(!rs.length ? 'Nothing to save yet.' : bad ? 'Could not save ' + bad + ' file(s).'
+      : 'Saved ' + rs.length + ' show file(s) to Downloads\\' + NSF.FOLDER + '.');
   });
-  $('import').addEventListener('click', async function () {
+  async function doImport(obj) {
     try {
-      var s = await NSF.importData(await NSF.pickJSONFile());
-      msg(NSF.statsText(s)); init();
+      var s = await NSF.importData(obj);
+      msg(NSF.statsText(s)); NSF.writeShows(s.shows, false); init();
     } catch (e) { msg('Could not load that file: ' + (e && e.message || e)); }
+  }
+  async function pickAndImport() {
+    try { await doImport(await NSF.pickJSONFile()); }
+    catch (e) { msg('Could not load that file: ' + (e && e.message || e)); }
+  }
+  $('import').addEventListener('click', pickAndImport);
+  $('import2').addEventListener('click', pickAndImport);
+
+  // Drag a .json file onto the page instead of using the file picker.
+  var dragDepth = 0;
+  function hasFiles(e) {
+    var t = e.dataTransfer && e.dataTransfer.types;
+    return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0;
+  }
+  function showDrop(on) { $('dropHint').style.display = on ? 'flex' : 'none'; }
+  window.addEventListener('dragenter', function (e) { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; showDrop(true); });
+  window.addEventListener('dragover', function (e) { if (!hasFiles(e)) return; e.preventDefault(); });
+  window.addEventListener('dragleave', function (e) { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) showDrop(false); });
+  window.addEventListener('drop', async function (e) {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); dragDepth = 0; showDrop(false);
+    var files = Array.prototype.slice.call(e.dataTransfer.files || []).filter(function (f) { return /\.json$/i.test(f.name) || f.type === 'application/json'; });
+    if (!files.length) { msg('That is not a .json scene list.'); return; }
+    for (var i = 0; i < files.length; i++) {
+      try { await doImport(await NSF.readJSONFile(files[i])); }
+      catch (err) { msg('Could not load ' + files[i].name + ': ' + (err && err.message || err)); }
+    }
   });
 
   // Stay in sync with changes made on the Netflix page (so we never write back stale settings).

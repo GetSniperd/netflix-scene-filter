@@ -52,6 +52,64 @@
     if (dt === 'Netflix') dt = '';
     return t || dt || '';
   }
+  /** { show, episode } from Netflix's title element; either may be ''. Never throws. */
+  function getShowInfo() {
+    var show = '', ep = '';
+    try {
+      var el = document.querySelector('[data-uia="video-title"]');
+      if (el) {
+        var h4 = el.querySelector('h4');
+        var parts = [];
+        if (h4) {
+          show = (h4.textContent || '').replace(/\s+/g, ' ').trim();
+          Array.prototype.forEach.call(el.querySelectorAll('span'), function (sp) {
+            if (h4.contains(sp)) return;
+            var t = (sp.textContent || '').replace(/\s+/g, ' ').trim();
+            if (t) parts.push(t);
+          });
+        } else {
+          Array.prototype.forEach.call(el.childNodes, function (n) {
+            if (n.nodeType === 3) {
+              var t = (n.textContent || '').replace(/\s+/g, ' ').trim();
+              if (t && !show) show = t;
+            } else if (n.nodeType === 1 && n.tagName === 'SPAN') {
+              var t2 = (n.textContent || '').replace(/\s+/g, ' ').trim();
+              if (t2) parts.push(t2);
+            }
+          });
+          if (!show && !parts.length) show = (el.textContent || '').replace(/\s+/g, ' ').trim();
+          else if (!show) show = parts.shift();
+        }
+        ep = parts.join(' - ');
+      }
+    } catch (e) {}
+    if (!show) {
+      var dt = (document.title || '').replace(/\s*[-|]\s*Netflix\s*$/i, '').trim();
+      if (dt && dt !== 'Netflix') show = dt;
+    }
+    return { show: show, episode: ep };
+  }
+  function currentShowName() {
+    var ep = episode();
+    return NSF.showNameOf(ep, state.videoId);
+  }
+  var savedToastShown = false;
+  /** Mirror a show's file to disk. quiet=true for background auto-saves (toast only first time / on failure). */
+  function mirror(showName, now) {
+    if (!showName) return;
+    NSF.writeShowFile(showName, now).then(function (r) {
+      if (!r || r.skipped || r.superseded) { if (now && r && r.skipped) toast('Auto-save is off'); return; }
+      if (r.ok) {
+        if (now || !savedToastShown) {
+          savedToastShown = true;
+          toast('Saved to Downloads\\' + NSF.FOLDER + '\\' + (r.file || 'the show file'), 3500);
+        }
+      } else {
+        toast('Could not save the file' + (r.error ? ' (' + r.error + ')' : '') + '. Your scenes are still kept in the add-on.', 5000);
+      }
+    });
+  }
+
   function catMap() {
     var m = {};
     state.categories.forEach(function (c) { m[c.id] = c; });
@@ -311,11 +369,33 @@
     fn(ep);
     var t = getTitle();
     if (t) ep.title = t;
+    var info = getShowInfo();
+    if (!ep.showTitle && info.show) ep.showTitle = info.show;
+    if (!ep.episodeLabel && info.episode) ep.episodeLabel = info.episode;
     ep.updatedAt = Date.now();
     lib[state.videoId] = ep;
     state.library = lib;
     await NSF.setLibrary(lib);
     renderPanel();
+    mirror(NSF.showNameOf(ep, state.videoId), false);
+  }
+
+  /** Rename the show this episode belongs to (all its episodes move together). */
+  async function renameShow(newName) {
+    newName = String(newName || '').trim();
+    if (!newName || !state.videoId) return;
+    var all = await NSF.getAll();
+    var lib = all.library;
+    var cur = lib[state.videoId];
+    if (!cur) { cur = lib[state.videoId] = { videoId: state.videoId, title: '', segments: [], updatedAt: Date.now() }; }
+    var oldName = NSF.showNameOf(cur, state.videoId);
+    var g = NSF.groupByShow(lib)[oldName] || [state.videoId];
+    g.forEach(function (id) { if (lib[id]) lib[id].showTitle = newName; });
+    state.library = lib;
+    await NSF.setLibrary(lib);
+    renderPanel();
+    mirror(newName, false);
+    toast('Show renamed to "' + newName + '"');
   }
 
   function saveSettings() { return NSF.setSettings(state.settings); }
@@ -579,6 +659,12 @@
     }
 
     if (advanced || state.showScenes) {
+      var nameIn = h('input', { type: 'text', style: 'width:100%;box-sizing:border-box', value: currentShowName(),
+        title: 'The name used for this show\'s file. Change it if Netflix\'s title is not what you want.' });
+      nameIn.addEventListener('input', function () { nameIn.dataset.dirty = '1'; });
+      nameIn.addEventListener('change', function () { nameIn.dataset.dirty = '0'; renameShow(nameIn.value); });
+      body.appendChild(h('div', { class: 'h4', text: 'Show name (used for the saved file)' }));
+      body.appendChild(nameIn);
       var segs = sortedSegments();
       body.appendChild(h('div', { class: 'h4', text: 'Scenes marked in this show (' + segs.length + ')' }));
       var list = h('div', { style: 'display:flex;flex-direction:column;gap:6px' });
@@ -589,8 +675,8 @@
 
     if (advanced) {
       body.appendChild(h('div', { class: 'footer' },
-        h('button', { title: 'Save the scenes for this show to a file you can share', text: 'Save my list to a file', onclick: exportEpisode }),
-        h('button', { title: 'Save the scenes for all your shows to a file', text: 'Save all my shows', onclick: exportLibrary }),
+        h('button', { title: 'Write this show\'s file now (Downloads\\Netflix Scene Filter)', text: 'Save my list to a file', onclick: exportEpisode }),
+        h('button', { title: 'Write one file per show', text: 'Save all my shows', onclick: exportLibrary }),
         h('button', { title: 'Add scenes from a file someone shared with you', text: 'Load a list from a file', onclick: importFile })));
       var hk = st.hotkeys;
       body.appendChild(h('div', { class: 'muted', text: 'Keyboard shortcuts (optional): ' + hk.markStart + ' mark start, ' + hk.markEnd +
@@ -782,12 +868,16 @@
   function exportEpisode() {
     var ep = episode();
     if (!ep) { toast('There is nothing to save yet'); return; }
-    NSF.downloadJSON('scene-filter-' + state.videoId + '.json', NSF.buildExport(state.library, state.categories, [state.videoId]));
-    toast('Saved this show\'s list to a file');
+    mirror(currentShowName(), true);
   }
-  function exportLibrary() {
-    NSF.downloadJSON('scene-filter-all-my-shows.json', NSF.buildExport(state.library, state.categories));
-    toast('Saved all your shows to a file');
+  async function exportLibrary() {
+    var names = Object.keys(NSF.groupByShow(state.library));
+    if (!names.length) { toast('There is nothing to save yet'); return; }
+    var rs = await NSF.writeShows(names, true);
+    var bad = rs.filter(function (r) { return !r || !r.ok; }).length;
+    savedToastShown = true;
+    toast(bad ? 'Could not save ' + bad + ' of ' + names.length + ' file(s)'
+      : 'Saved ' + names.length + ' show file(s) to Downloads\\' + NSF.FOLDER, 3500);
   }
   async function importFile() {
     try {
@@ -796,6 +886,7 @@
       state.library = all.library; state.categories = all.categories;
       toast(NSF.statsText(s), 5000);
       renderAll();
+      NSF.writeShows(s.shows, false);
     } catch (e) { toast('Could not load that file: ' + (e && e.message || e), 5000); }
   }
 
@@ -903,7 +994,7 @@
     { target: null, text: 'This bar lets you hide or mute parts of a show.' },
     { target: 'mark', text: 'When a scene starts that you want to filter, click "Mark start". When it ends, click "Mark end", then pick what kind of scene it was.' },
     { target: 'switch', text: 'This switch turns filtering on and off. Turn it off any time to watch everything.' },
-    { target: null, text: 'Your scenes are saved for each episode. You can share them with another parent from Settings (the gear button): "Save my list to a file".' }
+    { target: null, text: 'Your scenes are saved as a file for each show (in your Downloads folder). To share with another parent, send them that file; they load it from Settings (the gear button).' }
   ];
 
   function maybeStartTour() {
